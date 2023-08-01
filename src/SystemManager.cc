@@ -159,8 +159,10 @@ void SystemManager::Reset(const UpdateInfo &_info, EntityComponentManager &_ecm)
 
   std::vector<PluginInfo> pluginsToBeLoaded;
 
-  for (auto &system : this->systems)
+  for (auto it = this->systems.begin(); it != this->systems.end();)
   {
+    auto &system = *it;
+
     if (nullptr != system.reset)
     {
       // If implemented, call reset and add to pending systems.
@@ -170,6 +172,8 @@ void SystemManager::Reset(const UpdateInfo &_info, EntityComponentManager &_ecm)
         std::lock_guard<std::mutex> lock(this->pendingSystemsMutex);
         this->pendingSystems.push_back(system);
       }
+
+      ++it;
     }
     else
     {
@@ -188,23 +192,18 @@ void SystemManager::Reset(const UpdateInfo &_info, EntityComponentManager &_ecm)
           system.configureSdf->Clone() : nullptr;
       PluginInfo info = {system.parentEntity, system.fname, system.name, elem};
 
-      pluginsToBeLoaded.push_back(info);
+      it = this->systems.erase(it);
+
+      sdf::Plugin plugin;
+      plugin.Load(info.sdf);
+      plugin.SetFilename(info.fname);
+      plugin.SetName(info.name);
+      this->LoadPlugin(info.entity, plugin);
     }
   }
 
   this->systems.clear();
 
-  // Load plugins which do not implement reset after clearing this->systems
-  // to ensure the previous instance is destroyed before the new one is created
-  // and configured.
-  for (const auto &pluginInfo : pluginsToBeLoaded)
-  {
-    sdf::Plugin plugin;
-    plugin.Load(pluginInfo.sdf);
-    plugin.SetFilename(pluginInfo.fname);
-    plugin.SetName(pluginInfo.name);
-    this->LoadPlugin(pluginInfo.entity, plugin);
-  }
   this->ActivatePendingSystems();
 }
 
